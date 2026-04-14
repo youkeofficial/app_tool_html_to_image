@@ -24,6 +24,29 @@ if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }
 
+const toSnakeCase = (str: string) => str
+  .replace(/([a-z])([A-Z])/g, '$1_$2')
+  .replace(/[\s\W]+/g, '_')
+  .toLowerCase()
+  .replace(/^_|_$/g, '');
+
+const generateFilename = (providedName: string | undefined, contentToParse: string, extension: string) => {
+    let name = '';
+    if (providedName && providedName.trim().length > 0) {
+        name = providedName.replace(/\.[^/.]+$/, ""); 
+        name = toSnakeCase(name);
+    } else {
+        const textContent = contentToParse.replace(/<[^>]*>?/gm, ' '); 
+        const words = textContent.split(/\s+/).filter(w => w.length > 0).slice(0, 5);
+        if (words.length > 0) {
+            name = toSnakeCase(words.join(' '));
+        } else {
+            name = uuidv4();
+        }
+    }
+    return `${name || uuidv4()}${extension}`;
+};
+
 // Ensure puppeteer works in docker
 const getBrowser = async () => {
     return await puppeteer.launch({
@@ -108,9 +131,9 @@ app.post('/api/v1/generate/image', async (req, res) => {
 
     if (!finalHtml) return res.status(400).json({ error: 'HTML content or valid templateId missing' });
 
-    const id = filename ? filename : uuidv4();
-    const finalFilename = id.endsWith('.png') ? id : `${id}.png`;
+    const finalFilename = generateFilename(filename, finalHtml, '.png');
     const outputPath = path.join(dataDir, finalFilename);
+    const id = uuidv4();
 
     const generate = async () => {
         let browser;
@@ -162,9 +185,9 @@ app.post('/api/v1/generate/video', async (req, res) => {
 
     if (!finalHtml) return res.status(400).json({ error: 'HTML content or valid templateId missing' });
 
-    const id = filename ? filename : uuidv4();
-    const finalFilename = id.endsWith('.mp4') ? id : `${id}.mp4`;
+    const finalFilename = generateFilename(filename, finalHtml, '.mp4');
     const outputPath = path.join(dataDir, finalFilename);
+    const id = uuidv4();
 
     const generate = async () => {
         let browser;
@@ -215,9 +238,9 @@ app.post('/api/v1/generate/audio', async (req, res) => {
     const { text, lang = 'fr', filename, webhookUrl } = req.body;
     if (!text) return res.status(400).json({ error: 'text missing' });
 
-    const id = filename ? filename : uuidv4();
-    const finalFilename = id.endsWith('.mp3') ? id : `${id}.mp3`;
+    const finalFilename = generateFilename(filename, text, '.mp3');
     const outputPath = path.join(dataDir, finalFilename);
+    const id = uuidv4();
 
     const generate = async () => {
         try {
@@ -247,9 +270,9 @@ app.post('/api/v1/compose/video-audio', async (req, res) => {
     const { videoFile, audioFile, filename, webhookUrl } = req.body;
     if (!videoFile || !audioFile) return res.status(400).json({ error: 'videoFile or audioFile missing' });
 
-    const id = filename ? filename : uuidv4();
-    const finalFilename = id.endsWith('.mp4') ? id : (filename ? `${id}.mp4` : `${id}_composed.mp4`);
+    const finalFilename = generateFilename(filename, `${videoFile} ${audioFile} composed`, '.mp4');
     const outputPath = path.join(dataDir, finalFilename);
+    const id = uuidv4();
     const videoPath = path.join(dataDir, videoFile);
     const audioPath = path.join(dataDir, audioFile);
 
@@ -286,9 +309,9 @@ app.post('/api/v1/compose/image-audio', async (req, res) => {
     const { imageFile, audioFile, filename, webhookUrl } = req.body;
     if (!imageFile || !audioFile) return res.status(400).json({ error: 'imageFile or audioFile missing' });
 
-    const id = filename ? filename : uuidv4();
-    const finalFilename = id.endsWith('.mp4') ? id : (filename ? `${id}.mp4` : `${id}_composed.mp4`);
+    const finalFilename = generateFilename(filename, `${imageFile} ${audioFile} composed`, '.mp4');
     const outputPath = path.join(dataDir, finalFilename);
+    const id = uuidv4();
     const imagePath = path.join(dataDir, imageFile);
     const audioPath = path.join(dataDir, audioFile);
 
