@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  html-to-image:
+    build: .
+    container_name: app_tool_html_to_image
+    restart: always
+    ports:
+      - "5003:5003"
+      - "8004:8004"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=5003
+      - MCP_PORT=8004
