@@ -1,10 +1,8 @@
-FROM node:20-slim
+FROM node:20-bookworm-slim
 
-# Install latest chrome dev package and fonts to support major charsets (Chinese, Japanese, Arabic, Hebrew, Thai and a few others)
-# Note: this installs the necessary libs to make the bundled version of Chromium that Puppeteer
-# installs, work.
+# Install Chrome + fonts + build tools (needed to compile native modules like sqlite3)
 RUN apt-get update \
-    && apt-get install -y wget gnupg ffmpeg \
+    && apt-get install -y wget gnupg ffmpeg python3 make g++ \
     && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
     && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
     && apt-get update \
@@ -25,7 +23,7 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm install && npm rebuild sqlite3 --build-from-source
 
 COPY . .
 

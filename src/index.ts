@@ -12,9 +12,13 @@ import axios from 'axios';
 import logger from './logger.js';
 import Handlebars from 'handlebars';
 import { getDb } from './db.js';
+import cors from 'cors';
+
 
 const app = express();
+app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
 
 const PORT = process.env.PORT || 5003;
 const MCP_PORT = process.env.MCP_PORT || 8004;
@@ -381,127 +385,146 @@ app.listen(PORT, () => {
 });
 
 
-// ─── MCP Server (StreamableHTTP — SSEServerTransport est déprécié) ────────────
-const mcpServer = new McpServer({
-    name: "html-to-image",
-    version: "1.0.0"
+
+// ─── MCP via StreamableHTTP (stateful, per-session transport) ────────────────
+import { randomUUID } from 'crypto';
+
+const mcpApp = express();
+mcpApp.use(cors());
+mcpApp.use(express.json());
+
+// Handle JSON syntax errors
+mcpApp.use((err: any, _req: any, res: any, next: any) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+        logger.error("JSON Syntax Error", { error: err.message });
+        return res.status(400).json({ error: "Invalid JSON" });
+    }
+    next();
 });
 
-mcpServer.tool("generate_image", "Generate an image from HTML", {
-    html: z.string().describe("The HTML content"),
-    width: z.number().optional().describe("Width of the image"),
-    height: z.number().optional().describe("Height of the image")
-}, async ({ html, width, height }) => {
-    try {
-        const res = await axios.post(`http://localhost:${PORT}/api/v1/generate/image`, { html, width, height });
-        return {
-            content: [{ type: "text", text: `Image generated. File: ${res.data.file}, URL: http://localhost:${PORT}/files/${res.data.file}` }]
-        };
-    } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-    }
-});
-mcpServer.registerTool(
-    "generate_video", {
-    _meta: {},
-    annotations: {},
-    description: "Generate an mp4 video from animated HTML",
-    inputSchema: {
+// Map of sessionId → transport for managing concurrent sessions
+const sessionTransports = new Map<string, StreamableHTTPServerTransport>();
+
+// Helper: register all MCP tools on a McpServer instance
+function registerMcpTools(server: McpServer) {
+    server.tool("generate_image", "Generate an image from HTML", {
+        html: z.string().describe("The HTML content"),
+        width: z.number().optional().describe("Width of the image"),
+        height: z.number().optional().describe("Height of the image")
+    }, async ({ html, width, height }) => {
+        try {
+            const r = await axios.post(`http://localhost:${PORT}/api/v1/generate/image`, { html, width, height });
+            return { content: [{ type: "text", text: `Image generated. File: ${r.data.file}, URL: http://localhost:${PORT}/files/${r.data.file}` }] };
+        } catch (e: any) {
+            return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+        }
+    });
+
+    server.tool("generate_video", "Generate an mp4 video from animated HTML", {
         html: z.string().describe("The HTML content with animations"),
         duration: z.number().describe("Duration in seconds"),
         fps: z.number().optional().describe("Frames per second"),
         width: z.number().optional(),
         height: z.number().optional()
-    },
-    outputSchema: {
-        content: z.array(z.object({
-            type: z.string(),
-            text: z.string().optional(),
-            file: z.string().optional(),
-            url: z.string().optional()
-        })),
-        isError: z.boolean().optional()
-    },
-    title: "generate_video"
-},
-    async ({ html, duration, fps, width, height }) => {
+    }, async ({ html, duration, fps, width, height }) => {
         try {
-            const res = await axios.post(`http://localhost:${PORT}/api/v1/generate/video`, { html, duration, fps, width, height });
-            return {
-                content: [{ type: "text", text: `Video generated. File: ${res.data.file}, URL: http://localhost:${PORT}/files/${res.data.file}` }]
-            };
+            const r = await axios.post(`http://localhost:${PORT}/api/v1/generate/video`, { html, duration, fps, width, height });
+            return { content: [{ type: "text", text: `Video generated. File: ${r.data.file}, URL: http://localhost:${PORT}/files/${r.data.file}` }] };
         } catch (e: any) {
             return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
         }
-    }
-);
-// mcpServer.tool("generate_video", "Generate an mp4 video from animated HTML", {
-//     html: z.string().describe("The HTML content with animations"),
-//     duration: z.number().describe("Duration in seconds"),
-//     fps: z.number().optional().describe("Frames per second"),
-//     width: z.number().optional(),
-//     height: z.number().optional()
-// }, async ({ html, duration, fps, width, height }) => {
-//     try {
-//         const res = await axios.post(`http://localhost:${PORT}/api/v1/generate/video`, { html, duration, fps, width, height });
-//         return {
-//             content: [{ type: "text", text: `Video generated. File: ${res.data.file}, URL: http://localhost:${PORT}/files/${res.data.file}` }]
-//         };
-//     } catch (e: any) {
-//         return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-//     }
-// });
+    });
 
-mcpServer.tool("generate_audio", "Generate speech audio from text", {
-    text: z.string().describe("The text to synthesize"),
-    lang: z.string().optional().describe("Language code e.g. fr, en, es, de")
-}, async ({ text, lang }) => {
-    try {
-        const res = await axios.post(`http://localhost:${PORT}/api/v1/generate/audio`, { text, lang });
-        return {
-            content: [{ type: "text", text: `Audio generated. File: ${res.data.file}, URL: http://localhost:${PORT}/files/${res.data.file}` }]
-        };
-    } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-    }
-});
+    server.tool("generate_audio", "Generate speech audio from text", {
+        text: z.string().describe("The text to synthesize"),
+        lang: z.string().optional().describe("Language code e.g. fr, en, es, de")
+    }, async ({ text, lang }) => {
+        try {
+            const r = await axios.post(`http://localhost:${PORT}/api/v1/generate/audio`, { text, lang });
+            return { content: [{ type: "text", text: `Audio generated. File: ${r.data.file}, URL: http://localhost:${PORT}/files/${r.data.file}` }] };
+        } catch (e: any) {
+            return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+        }
+    });
 
-mcpServer.tool("compose_video_audio", "Merge a video file and an audio file", {
-    videoFile: z.string().describe("Filename of the video in data directory"),
-    audioFile: z.string().describe("Filename of the audio in data directory")
-}, async ({ videoFile, audioFile }) => {
-    try {
-        const res = await axios.post(`http://localhost:${PORT}/api/v1/compose/video-audio`, { videoFile, audioFile });
-        return {
-            content: [{ type: "text", text: `Composed. File: ${res.data.file}, URL: http://localhost:${PORT}/files/${res.data.file}` }]
-        };
-    } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-    }
-});
+    server.tool("compose_video_audio", "Merge a video file and an audio file", {
+        videoFile: z.string().describe("Filename of the video in data directory"),
+        audioFile: z.string().describe("Filename of the audio in data directory")
+    }, async ({ videoFile, audioFile }) => {
+        try {
+            const r = await axios.post(`http://localhost:${PORT}/api/v1/compose/video-audio`, { videoFile, audioFile });
+            return { content: [{ type: "text", text: `Composed. File: ${r.data.file}, URL: http://localhost:${PORT}/files/${r.data.file}` }] };
+        } catch (e: any) {
+            return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+        }
+    });
 
-mcpServer.tool("compose_image_audio", "Create a video from a static image and audio", {
-    imageFile: z.string().describe("Filename of the image in data directory"),
-    audioFile: z.string().describe("Filename of the audio in data directory")
-}, async ({ imageFile, audioFile }) => {
-    try {
-        const res = await axios.post(`http://localhost:${PORT}/api/v1/compose/image-audio`, { imageFile, audioFile });
-        return {
-            content: [{ type: "text", text: `Composed. File: ${res.data.file}, URL: http://localhost:${PORT}/files/${res.data.file}` }]
-        };
-    } catch (e: any) {
-        return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
-    }
-});
-
-// MCP via StreamableHTTP
-const mcpApp = express();
-mcpApp.use(express.json());
+    server.tool("compose_image_audio", "Create a video from a static image and audio", {
+        imageFile: z.string().describe("Filename of the image in data directory"),
+        audioFile: z.string().describe("Filename of the audio in data directory")
+    }, async ({ imageFile, audioFile }) => {
+        try {
+            const r = await axios.post(`http://localhost:${PORT}/api/v1/compose/image-audio`, { imageFile, audioFile });
+            return { content: [{ type: "text", text: `Composed. File: ${r.data.file}, URL: http://localhost:${PORT}/files/${r.data.file}` }] };
+        } catch (e: any) {
+            return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
+        }
+    });
+}
 
 mcpApp.all('/mcp', async (req, res) => {
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await mcpServer.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+    // Check if this is an initialization request
+    const isInit = req.body?.method === 'initialize';
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+    logger.info(`MCP Request: ${req.method} ${req.url}`, { method: req.body?.method, sessionId });
+
+    res.on('finish', () => {
+        logger.info(`MCP Response: ${req.method} ${req.url} - Status: ${res.statusCode}`, { method: req.body?.method });
+    });
+
+    try {
+        if (isInit || !sessionId) {
+            // New session: create a fresh McpServer + transport per session
+            const transport = new StreamableHTTPServerTransport({
+                sessionIdGenerator: () => randomUUID(),
+                onsessioninitialized: (id) => {
+                    logger.info(`MCP session initialized: ${id}`);
+                    sessionTransports.set(id, transport);
+                },
+            });
+
+            transport.onclose = () => {
+                const sid = transport.sessionId;
+                if (sid) {
+                    sessionTransports.delete(sid);
+                    logger.info(`MCP session closed: ${sid}`);
+                }
+            };
+
+            const server = new McpServer({
+                name: "html-to-image",
+                version: "1.0.0"
+            });
+            registerMcpTools(server);
+            await server.connect(transport);
+
+            await transport.handleRequest(req, res, req.body);
+        } else {
+            // Existing session: find the transport by session ID
+            const existingTransport = sessionTransports.get(sessionId);
+            if (!existingTransport) {
+                res.status(404).json({ error: "Session not found" });
+                return;
+            }
+            await existingTransport.handleRequest(req, res, req.body);
+        }
+    } catch (err: any) {
+        logger.error("Error handling MCP request", { error: err.message, stack: err.stack });
+        if (!res.headersSent) {
+            res.status(500).json({ error: err.message });
+        }
+    }
 });
 
 mcpApp.listen(MCP_PORT, () => {
