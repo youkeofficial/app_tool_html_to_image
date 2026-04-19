@@ -1,0 +1,48 @@
+<div class="d-flex h-100 w-100">
+    <div class="content-wrapper flex-grow-1">
+        <div id="result-toast-container" class="mb-4"></div>
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="fw-bold m-0">Mes Images</h4>
+            <% if (magicEnabled) { %>
+                <div class="input-group input-group-sm" style="max-width:380px;">
+                    <input type="text" id="magic-prompt-image" class="form-control bg-dark text-white border-info border-opacity-25" placeholder="Idée / Sujet...">
+                    <button onclick="Render.magicIdea('image')" class="btn btn-outline-info px-3">
+                        <i class="bi bi-stars me-1"></i> Magic
+                    </button>
+                </div>
+            <% } %>
+        </div>
+
+        <!-- Galerie images en grille -->
+        <div class="row g-3" id="history-image"></div>
+    </div>
+    
+    <!-- Sidebar : Editeur + Preview -->
+    <div class="sidebar-history">
+        <div class="glass-card p-3 mb-4 border-info border-opacity-10">
+            <h6 class="fw-bold mb-2 small text-uppercase text-info"><i class="bi bi-code-slash me-2"></i>HTML Custom</h6>
+            <textarea id="custom-html-image" class="form-control bg-dark text-white border-0 mb-2 small" rows="6" placeholder="Votre code HTML..."></textarea>
+            
+            <!-- Preview -->
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <small class="text-secondary">Aperçu Live</small>
+                <button class="btn btn-link btn-sm text-info p-0" onclick="Render.refreshPreview('image')"><i class="bi bi-arrow-clockwise"></i></button>
+            </div>
+            <iframe id="preview-image" class="w-100 rounded border border-secondary mb-3" style="height: 200px; background:#000;" sandbox="allow-scripts allow-same-origin"></iframe>
+            
+            <button onclick="Render.generateFromCustomHTML('image')" class="btn btn-premium w-100 btn-sm">
+                <i class="bi bi-image me-2"></i>Générer l'Image
+            </button>
+        </div>
+
+        <!-- Profil / API Key -->
+        <div class="glass-card p-3">
+            <h6 class="text-secondary text-uppercase small fw-bold mb-3">Profil & API Key</h6>
+            <div id="permission-list" class="d-flex flex-wrap gap-2 mb-3"></div>
+            <div class="bg-black p-2 rounded small font-monospace text-success border border-success border-opacity-25 text-truncate" id="api-key-val"></div>
+            <hr class="opacity-10 my-3 text-white">
+            <button class="btn btn-sm btn-outline-danger w-100" onclick="Auth.deleteAccount()">Supprimer compte</button>
+        </div>
+    </div>
+</div>

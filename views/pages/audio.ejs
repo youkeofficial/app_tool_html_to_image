@@ -1,0 +1,42 @@
+<div class="d-flex h-100 w-100">
+    <div class="content-wrapper flex-grow-1 pe-4">
+        <div id="result-toast-container" class="mb-4"></div>
+        <h2 class="fw-bold mb-4">Synthèse Vocale (TTS)</h2>
+        <div class="glass-card p-4 shadow-lg border-info border-opacity-10">
+            <div class="mb-3">
+                <label class="form-label text-secondary small uppercase fw-bold">Langue de synthèse</label>
+                <select id="audio-lang" class="form-select bg-dark text-white border-0 py-2">
+                    <option value="fr">Français (France)</option>
+                    <option value="en">Anglais (USA)</option>
+                    <option value="es">Espagnol (Espagne)</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label class="form-label text-secondary small uppercase fw-bold">Texte à convertir</label>
+                <textarea id="audio-text" class="form-control bg-dark text-white border-0" rows="8" placeholder="Saisissez le message que vous souhaitez transformer en voix..."></textarea>
+            </div>
+            <div class="d-flex flex-column gap-3 mt-4 pt-4 border-top border-secondary border-opacity-25">
+                <button id="btn-gen-audio" onclick="Render.generateAudio()" class="btn btn-premium w-100 py-3 fs-5">
+                    <i class="bi bi-megaphone me-2"></i> Générer l'Audio
+                </button>
+                
+                <% if (magicEnabled) { %>
+                    <div class="input-group">
+                        <input type="text" id="magic-prompt-audio" class="form-control bg-dark text-white border-info border-opacity-25" placeholder="Sujet d'inspiration IA (ex: Méditation)...">
+                        <button onclick="Render.magicIdea('audio')" class="btn btn-outline-info px-4">
+                            <i class="bi bi-stars me-2"></i> Magic Idea
+                        </button>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+    
+    <div class="sidebar-history">
+        <h5 class="fw-bold mb-4 d-flex justify-content-between align-items-center">
+            <span>Historique Audio</span>
+            <i class="bi bi-clock-history text-info"></i>
+        </h5>
+        <div id="history-audio" class="d-flex flex-column gap-3"></div>
+    </div>
+</div>
